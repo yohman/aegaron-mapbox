@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset='utf-8' />
+	<title>AEGARON Mapbox prototype</title>
+	<meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+	<script src='https://api.tiles.mapbox.com/mapbox-gl-js/v1.2.0/mapbox-gl.js'></script>
+	<link href='https://api.tiles.mapbox.com/mapbox-gl-js/v1.2.0/mapbox-gl.css' rel='stylesheet' />
+	<link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/smoothness/jquery-ui.css">
+	<script src="https://code.jquery.com/jquery-1.12.4.js"></script>
+	<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+	<style>
+		body { margin:0; padding:0; }
+		#map { position:absolute; top:0; bottom:0; width:100%; }
+	</style>
+</head>
+<body>
+
+<div id='map'></div>
+<div id='infopanel' style="position: absolute;top: 10px; left: 10px; padding: 20px; width: 300px;border-radius: 5px; background-color: white">
+	<h2 id="title" style="margin-block-start: 0em;margin-block-end: 0.2em;">AEGARON</h2>
+	<h3 id="subtitle" style="margin-block-start: 0.2em;margin-block-end: 0.4em;">Mapbox Prototype (yk 8/23/2019)</h3>
+	<select id="planselect"></select>
+	<div id="slider" style="width:200px;"></div>
+	rotate and tilt: [ shift + arrow keys ]
+</div>
+<script>
+
+mapboxgl.accessToken = 'pk.eyJ1IjoieW9obWFuIiwiYSI6IkxuRThfNFkifQ.u2xRJMiChx914U7mOZMiZw';
+
+// Define namespace 
+var aegaron = {}
+
+// set up the mapbox map
+aegaron.map = new mapboxgl.Map({
+	container: 'map',
+	maxZoom: 25,
+	minZoom: 4,
+	zoom: 5,
+	center: [32.884306, 24.025461],
+	style: 'mapbox://styles/mapbox/satellite-v9'
+});
+
+// some default params
+aegaron.activeplan = '0110'
+aegaron.opacity = .8
+
+// do stuff only after the map loads
+aegaron.map.on('load', function() {
+
+	// get the plans
+	$.getJSON('plans.json')
+		.done(function(data)
+		{
+			aegaron.plans = data
+			// add plans to dropdown
+			$.each(aegaron.plans,function(i,val){
+
+					if(val.file_name === aegaron.activeplan)
+					{
+						option = '<option selected></option>'
+					}
+					else
+					{
+						option = '<option></option>'
+					}
+
+				$('#planselect').append(
+					$(option).val(val.file_name).html(val.file_name)
+				);				
+			})
+
+			// add an onchange event to the dropdown
+			$('#planselect').change(function(){
+				aegaron.addPlan(this.value)
+			})
+
+			// add the selected plan to the map
+			aegaron.addPlan(aegaron.activeplan)
+
+			// initiate opacity slider
+			$( "#slider" ).slider({"value":aegaron.opacity*100});
+
+			$( "#slider" ).on( "slide", function( event, ui ) {
+				aegaron.opacity = ui.value/100
+				aegaron.map.setPaintProperty('overlay', 'raster-opacity', ui.value/100)
+			} );
+		})
+
+});
+
+aegaron.addPlan = function(activeplan)
+{
+	aegaron.activeplan = activeplan
+
+	// if overlay exists, remove it first
+	if(aegaron.map.getLayer('overlay'))
+	{
+		aegaron.map.removeLayer('overlay')
+	}
+	if(aegaron.map.getSource('planSource'))
+	{
+		aegaron.map.removeSource('planSource')
+	}
+
+	// find the plan and get the bounding coordinates
+	aegaron.activeplandata = aegaron.findPlan(aegaron.activeplan)
+
+	// add it as a source
+	aegaron.map.addSource("planSource", {
+		"type": "image",
+		"url": "images/_"+aegaron.activeplandata.file_name+"_jp2.png",
+		"coordinates": [
+			[aegaron.activeplandata.west, aegaron.activeplandata.north],
+			[aegaron.activeplandata.east, aegaron.activeplandata.north],
+			[aegaron.activeplandata.east, aegaron.activeplandata.south],
+			[aegaron.activeplandata.west, aegaron.activeplandata.south]
+		]
+	});
+
+	// add it as a layer
+	aegaron.map.addLayer({
+		"id": "overlay",
+		"source": "planSource",
+		"type": "raster",
+		"paint": {
+			"raster-opacity": aegaron.opacity
+		}
+	});
+
+	// zoom to the extent of the plan
+	aegaron.map.fitBounds([[
+		aegaron.activeplandata.west,
+		aegaron.activeplandata.south
+	], [
+		aegaron.activeplandata.east,
+		aegaron.activeplandata.north
+	]]);
+}
+
+aegaron.findPlan = function(plan)
+{
+	var planfound = ''
+	$.each(aegaron.plans,function(i,val){
+		// console.log(val.file_name)
+		if(val.file_name === plan)
+		{
+			console.log('found '+plan)
+			planfound = val
+		}
+	})
+	return planfound
+}
+</script>
+
+</body>
+</html>
